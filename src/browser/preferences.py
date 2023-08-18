@@ -17,7 +17,6 @@ from gettext import gettext as _
 
 from reminders import info
 from reminders.browser.caldav_sign_in import CalDAVSignIn
-from reminders.browser.microsoft_sign_in import MicrosoftSignIn
 
 from gi.repository import Gtk, Adw, GLib, Gio, Pango
 from logging import getLogger
@@ -31,9 +30,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
     sound_switch = Gtk.Template.Child()
     sound_theme_switch = Gtk.Template.Child()
     time_format_row = Gtk.Template.Child()
-    ms_sync_row = Gtk.Template.Child()
     caldav_sync_row = Gtk.Template.Child()
-    ms_add_account = Gtk.Template.Child()
     caldav_add_account = Gtk.Template.Child()
     refresh_button = Gtk.Template.Child()
     refresh_time_row = Gtk.Template.Child()
@@ -60,8 +57,6 @@ class PreferencesWindow(Adw.PreferencesWindow):
         self.synced = self.settings.get_value('synced-lists').unpack()
         self.user_rows = {}
 
-        for user_id, username in self.app.win.ms_users.items():
-            self.on_ms_signed_in(user_id, username)
         for user_id, username in self.app.win.caldav_users.items():
             self.on_caldav_signed_in(user_id, username)
 
@@ -98,16 +93,6 @@ class PreferencesWindow(Adw.PreferencesWindow):
         self.set_visible(False)
         return True
 
-    def on_ms_signed_in(self, user_id, username):
-        lists = {}
-        for list_id, value in self.app.win.all_lists.items():
-            if value['user-id'] == user_id:
-                lists[list_id] = value['name']
-        self.user_rows[user_id] = PreferencesUserRow(self, user_id, username, lists)
-        self.ms_sync_row.add_row(self.user_rows[user_id])
-        self.ms_sync_row.remove(self.ms_add_account)
-        self.ms_sync_row.add_row(self.ms_add_account) # move to end
-
     def on_caldav_signed_in(self, user_id, username):
         lists = {}
         for list_id, value in self.app.win.all_lists.items():
@@ -143,21 +128,11 @@ class PreferencesWindow(Adw.PreferencesWindow):
     def update_time_format(self):
         self.settings.set_enum('time-format', self.time_format_row.get_selected())
 
-    def ms_signed_in(self, user_id, username):
-        if user_id not in self.user_rows.keys():
-            self.on_ms_signed_in(user_id, username)
-            self.user_rows[user_id].set_expanded(True)
-            self.synced_lists_updated(user_id)
-
     def caldav_signed_in(self, user_id, username):
         if user_id not in self.user_rows.keys():
             self.on_caldav_signed_in(user_id, username)
             self.user_rows[user_id].set_expanded(True)
             self.synced_lists_updated(user_id)
-
-    @Gtk.Template.Callback()
-    def ms_sign_in(self, row = None):
-        MicrosoftSignIn(self)
 
     @Gtk.Template.Callback()
     def caldav_sign_in(self, row = None):

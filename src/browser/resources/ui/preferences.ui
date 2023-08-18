@@ -34,34 +34,6 @@
               <class name="ms-accounts"/>
             </style>
             <child>
-              <object class="AdwExpanderRow" id="ms_sync_row">
-                <property name="title" translatable="yes">Microsoft To Do</property>
-                <child>
-                  <object class="AdwActionRow" id="ms_add_account">
-                    <style>
-                      <class name="row-button"/>
-                      <class name="suggested-action"/>
-                    </style>
-                    <property name="activatable">true</property>
-                    <child type="prefix">
-                      <object class="GtkLabel">
-                        <property name="valign">center</property>
-                        <property name="halign">center</property>
-                        <property name="label" translatable="yes">Add Account</property>
-                      </object>
-                    </child>
-                    <child type="prefix">
-                      <object class="GtkBox">
-                        <property name="hexpand">true</property>
-                        <property name="halign">start</property>
-                      </object>
-                    </child>
-                    <signal name="activated" handler="ms_sign_in" swapped="no"/>
-                  </object>
-                </child>
-              </object>
-            </child>
-            <child>
               <object class="AdwExpanderRow" id="caldav_sync_row">
                 <property name="title" translatable="yes">CalDAV</property>
                 <child>

@@ -153,7 +153,6 @@ class MainWindow(Adw.ApplicationWindow):
 
         users = self.app.run_service_method('GetUsers', None).unpack()[0]
 
-        self.ms_users = users['ms-to-do'].copy()
         self.caldav_users = users['caldav'].copy()
 
         self.usernames = {}
@@ -162,7 +161,6 @@ class MainWindow(Adw.ApplicationWindow):
                 self.usernames[key] = value
 
         self.app.service.connect('g-signal::CalDAVSignedIn', self.caldav_signed_in_cb)
-        self.app.service.connect('g-signal::MSSignedIn', self.ms_signed_in_cb)
         self.app.service.connect('g-signal::SignedOut', self.signed_out_cb)
         self.app.service.connect('g-signal::UsernameUpdated', self.username_updated)
 
@@ -267,13 +265,6 @@ class MainWindow(Adw.ApplicationWindow):
             opts['list-id'] = row.list_id
             if reminder.options['list-id'] != opts['list-id']:
                 user_id = self.synced_lists[opts['list-id']]['user-id']
-                if user_id in self.ms_users.keys():
-                    if opts['repeat-type'] in (1, 2):
-                        opts['repeat-type'] = 0
-                        opts['repeat-frequency'] = 1
-                        opts['repeat-days'] = 0
-                    opts['repeat-until'] = 0
-                    opts['repeat-times'] = -1
 
                 variants.append({
                     'id': GLib.Variant('s', reminder.id),
@@ -572,23 +563,12 @@ class MainWindow(Adw.ApplicationWindow):
     def signed_out_cb(self, proxy, sender_name, signal_name, parameters):
         user_id = parameters.unpack()[0]
         self.usernames.pop(user_id)
-        if user_id in self.ms_users:
-            self.ms_users.pop(user_id)
         if user_id in self.caldav_users:
             self.caldav_users.pop(user_id)
         if self.app.preferences is not None:
             self.app.preferences.on_signed_out(user_id)
         if self.edit_lists_window is not None:
             self.edit_lists_window.signed_out(user_id)
-
-    def ms_signed_in_cb(self, proxy, sender_name, signal_name, parameters):
-        user_id, username = parameters.unpack()
-        self.usernames[user_id] = username
-        self.ms_users[user_id] = username
-        if self.app.preferences is not None:
-            self.app.preferences.ms_signed_in(user_id, username)
-        if self.edit_lists_window is not None:
-            self.edit_lists_window.signed_in(user_id, username)
 
     def caldav_signed_in_cb(self, proxy, sender_name, signal_name, parameters):
         user_id, username = parameters.unpack()

@@ -6,7 +6,6 @@ resources = files(
     'ui/export_lists_window.ui',
     'ui/import_lists_window.ui',
     'ui/main_window.ui',
-    'ui/microsoft_sign_in.ui',
     'ui/move_reminders_window.ui',
     'ui/preferences.ui',
     'ui/preferences_user_row.ui',

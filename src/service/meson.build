@@ -9,7 +9,6 @@ source_files = files(
   'countdowns.py',
   'icalendar.py',
   'application.py',
-  'ms_to_do.py',
   'queue.py',
   'reminder.py'
 )

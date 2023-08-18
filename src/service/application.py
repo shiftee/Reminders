@@ -19,10 +19,11 @@ import sys
 from gi.repository import Gio, GLib
 from reminders import info
 from reminders.service.backend import Reminders
-
+ 
 class RemembranceService(Gio.Application):
     '''Background service for working with reminders'''
     def __init__(self, **kwargs):
+        print("init called")
         super().__init__(**kwargs)
         self.configure_logging()
         try:
@@ -57,26 +58,36 @@ class RemembranceService(Gio.Application):
 
             self.create_action('quit', self.quit_service, None)
 
+            print("init 9")
             self.reminders = Reminders(self)
+            print("init done")
         except Exception as error:
+            print("init had exception")
             self.quit()
             self.logger.exception(error)
             raise error
 
     def do_startup(self):
+        print("do)starup called")
         Gio.Application.do_startup(self)
         self.reminders.start_countdowns()
         self.hold()
+        print("do)starup done")
 
     def do_activate(self):
+        print("do activate called")
         Gio.Application.do_activate(self)
+        print("do activatedone")
 
     def create_action(self, name, callback, variant = None):
+        print("create action called")
         action = Gio.SimpleAction.new(name, variant)
         action.connect('activate', callback)
         self.add_action(action)
+        print("create action done")
 
     def launch_browser(self, action = None, variant = None):
+        print("launch browser (dbus) called")
         browser = Gio.DBusProxy.new_for_bus_sync(
             Gio.BusType.SESSION,
             Gio.DBusProxyFlags.NONE,
@@ -87,6 +98,7 @@ class RemembranceService(Gio.Application):
             None
         )
 
+        print("launch browser (dbus) calling sync")
         browser.call_sync(
             'Activate',
             GLib.Variant('(sava{sv})', ('notification-clicked', None, None)),
@@ -94,6 +106,7 @@ class RemembranceService(Gio.Application):
             -1,
             None
         )
+        print("launch browser (dbus) done")
 
     def notification_completed_cb(self, action, variant, data = None):
         reminder_id = variant.get_string()
@@ -101,14 +114,15 @@ class RemembranceService(Gio.Application):
 
     def configure_logging(self):
         handler = logging.StreamHandler()
-        handler.setLevel(logging.INFO)
+        handler.setLevel(logging.DEBUG)
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(module)s:%(funcName)s - %(message)s')
         handler.setFormatter(formatter)
         self.logger = logging.getLogger(info.service_executable)
-        self.logger.setLevel(logging.INFO)
+        self.logger.setLevel(logging.DEBUG)
         self.logger.addHandler(handler)
 
     def quit_service(self, action, data):
+        print("quit serivce called")
         self.quit()
 
 def main():
@@ -117,6 +131,8 @@ def main():
             application_id=info.service_id,
             flags=Gio.ApplicationFlags.DEFAULT_FLAGS
         )
+        print("running app")
         return app.run(sys.argv)
     except Exception as error:
+        print("main exception")
         sys.exit(error)

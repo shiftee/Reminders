@@ -21,7 +21,6 @@ require_version('Secret', '1')
 
 from gi.repository import GLib, Gio, GSound, Secret
 from reminders import info
-from reminders.service.ms_to_do import MSToDo
 from reminders.service.caldav import CalDAV
 from reminders.service.queue import ReminderQueue
 from reminders.service.countdowns import Countdowns
@@ -64,11 +63,15 @@ with open(info.interface_file, newline='') as f:
 
 class Reminders():
     def __init__(self, app):
+        print(">init called")
         if not path.isdir(info.data_dir):
             mkdir(info.data_dir)
+        print(">init 2")
         self.connection = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        print(">init checking 3")
         self.app = app
         self.reminders = self.lists = {}
+        print(">init checking4444")
         self.schema = Secret.Schema.new(
             info.app_id,
             Secret.SchemaFlags.NONE,
@@ -77,25 +80,33 @@ class Reminders():
         self.refreshing = False
         self._regid = None
         self.playing_sound = False
+
+        print(">init checking5")
         self.synced_ids = self.app.settings.get_value('synced-lists').unpack()
-        self.to_do = MSToDo(self)
+        print(">init checking6")
+        print(">init checking6.5")
         self.caldav = CalDAV(self)
+        print(">init checking6.6")
         self.ical = iCalendar(self)
         self.queue = ReminderQueue(self)
         self.synced_changed = self.app.settings.connect('changed::synced-lists', lambda *args: self._synced_task_list_changed())
+        print(">init checking7")
         self.reminders, self.lists = self._get_reminders(migrate_old=True)
         self.sound = GSound.Context()
         self.sound.init()
         self.countdowns = Countdowns()
+        print(">init checking9")
         self.refresh_time = int(self.app.settings.get_string('refresh-frequency').strip('m'))
         self.app.settings.connect('changed::refresh-frequency', lambda *args: self._refresh_time_changed())
         self.app.settings.connect('changed::week-starts-sunday', lambda *args: self._week_start_changed())
+        print(">init queue.qload")
         try:
             self.queue.load()
         except:
             pass
         self._save_reminders()
         self._save_lists()
+        print(">init setting methods")
         self._methods = {
             'GetUsers': self.get_users,
             'GetLists': self.get_lists,
@@ -117,7 +128,6 @@ class Reminders():
             'UpdateReminderv': self.update_reminderv,
             'UpdateCompletedv': self.update_completedv,
             'RemoveReminderv': self.remove_reminderv,
-            'MSGetLoginURL': self.get_todo_login_url,
             'CalDAVLogin': self.login_caldav,
             'CalDAVUpdateDisplayName': self.caldav_update_username,
             'Logout': self.logout,
@@ -127,17 +137,11 @@ class Reminders():
             'GetVersion': self.get_version
         }
         self._register()
+        print(">init done")
 
     def emit_error(self, error):
         logger.error("".join(format_exception(error)))
         self.do_emit('Error', GLib.Variant('(s)', ("".join(format_exception(error)),)))
-
-    def emit_login(self, user_id):
-        username = self.to_do.users[user_id]['email']
-        self.synced_ids.append(user_id)
-        self._set_synced_lists_no_refresh(self.synced_ids)
-        self.do_emit('MSSignedIn', GLib.Variant('(ss)', (user_id, username)))
-        self.refresh(False)
 
     def start_countdowns(self):
         for reminder_id in self.reminders.keys():
@@ -224,14 +228,10 @@ class Reminders():
         updated_list_ids = self.queue.get_updated_list_ids()
         removed_list_ids = self.queue.get_removed_list_ids()
 
-        ms_lists, ms_not_synced = self.to_do.get_lists(removed_list_ids, old_lists, self.synced_ids)
-
         caldav_lists, caldav_not_synced = self.caldav.get_lists(removed_list_ids, old_lists, self.synced_ids)
 
-        not_synced = ms_not_synced + caldav_not_synced
+        not_synced = caldav_not_synced
 
-        if ms_lists is None:
-            ms_lists = {}
         if caldav_lists is None:
             caldav_lists = {}
 
@@ -244,47 +244,6 @@ class Reminders():
         for reminder_id, reminder in old_reminders.items():
             if reminder['list-id'] not in new_lists.keys():
                 new_reminders.pop(reminder_id)
-
-        for user_id in ms_lists.keys():
-            for task_list in ms_lists[user_id]:
-                list_id = task_list['id']
-
-                new_lists[list_id] = {
-                    'name': task_list['name'],
-                    'user-id': user_id,
-                    'uid': task_list['uid']
-                }
-
-                for task in task_list['tasks']:
-                    if task['id'] in removed_reminder_ids:
-                        continue
-
-                    reminder_id = None
-                    for old_reminder_id, old_reminder in old_reminders.items():
-                        if old_reminder['uid'] == task['id']:
-                            reminder_id = old_reminder_id
-                            break
-
-                    if reminder_id is None:
-                        reminder_id = self._do_generate_id()
-
-                    try:
-                        timestamp = self._rfc_to_timestamp(task['reminderDateTime']['dateTime']) if 'reminderDateTime' in task else 0
-                    except:
-                        timestamp = 0
-
-                    is_future = timestamp > floor(time())
-
-                    if reminder_id in old_reminders:
-                        if reminder_id in updated_reminder_ids:
-                            continue
-                        reminder = old_reminders[reminder_id].copy()
-                    else:
-                        reminder = Reminder()
-                        reminder['shown'] = timestamp != 0 and not (is_future or notify_past)
-
-                    new_reminders[reminder_id] = self.to_do.task_to_reminder(task, list_id, reminder, timestamp)
-
         for user_id in caldav_lists.keys():
             for task_list in caldav_lists[user_id]:
                 list_id = task_list['id']
@@ -466,86 +425,35 @@ class Reminders():
             self.emit_error(error)
 
     def _remote_remove_task(self, user_id, task_list, task_id):
-        if user_id in self.to_do.users.keys():
-            self.to_do.remove_task(user_id, task_list, task_id)
-        elif user_id in self.caldav.users.keys():
+        if user_id in self.caldav.users.keys():
             self.caldav.remove_task(user_id, task_list, task_id)
         else:
             raise KeyError('Invalid user id')
 
     def _remote_create_list(self, user_id, list_name):
-        if user_id in self.to_do.users.keys():
-            return self.to_do.create_list(user_id, list_name)
-        elif user_id in self.caldav.users.keys():
+        if user_id in self.caldav.users.keys():
             return self.caldav.create_list(user_id, list_name)
         else:
             raise KeyError('Invalid user id')
 
     def _remote_rename_list(self, user_id, list_id, list_name):
-        if user_id in self.to_do.users.keys():
-            self.to_do.update_list(user_id, list_id, list_name)
-        elif user_id in self.caldav.users.keys():
+        if user_id in self.caldav.users.keys():
             self.caldav.update_list(user_id, list_id, list_name)
         else:
             raise KeyError('Invalid user id')
 
     def _remote_delete_list(self, user_id, list_id):
-        if user_id in self.to_do.users.keys():
-            self.to_do.delete_list(user_id, list_id)
-        elif user_id in self.caldav.users.keys():
+        if user_id in self.caldav.users.keys():
             self.caldav.delete_list(user_id, list_id)
         else:
             raise KeyError('Invalid user id')
 
     def _remote_set_completed(self, reminder_id, reminder_dict):
         user_id = self.lists[reminder_dict['list-id']]['user-id']
-        if user_id in self.to_do.users.keys():
-            self._ms_set_completed(reminder_id, reminder_dict)
-        elif user_id in self.caldav.users.keys():
+        if user_id in self.caldav.users.keys():
             self._caldav_set_completed(reminder_id, reminder_dict)
         else:
             raise KeyError('Invalid user id')
-
-    def _ms_set_completed(self, reminder_id, reminder):
-        reminder_json = {}
-        reminder_json['status'] = 'completed' if reminder['completed'] else 'notStarted'
-
-        if reminder['completed']:
-            reminder_json['completedDateTime'] = {}
-            reminder_json['completedDateTime']['dateTime'] = self._timestamp_to_rfc(reminder['completed-date'])
-            reminder_json['completedDateTime']['timeZone'] = 'UTC'
-        else:
-            reminder_json['completedDateTime'] = None
-
-        list_id = reminder['list-id']
-        user_id = self.lists[reminder['list-id']]['user-id']
-        list_uid = self.lists[list_id]['uid']
-        results = self.to_do.update_task(user_id, list_uid, reminder['uid'], reminder_json)
-
-        try:
-            if reminder['completed'] and results['status'] != 'completed':
-                # this sucks but microsofts api is goofy and this is the only way I can get the new uid of the reminder that was completed
-                updated_timestamp = self._rfc_to_timestamp(results['lastModifiedDateTime'])
-                match_diff = None
-                new_uid = ''
-                for task in self.to_do.get_tasks(list_uid, user_id):
-                    if task['id'] == results['id']:
-                        continue
-                    timestamp = self._rfc_to_timestamp(task['lastModifiedDateTime'])
-                    diff = abs(updated_timestamp - timestamp)
-                    if match_diff is None or diff < match_diff:
-                        match_diff = diff
-                        new_uid = task['id']
-
-                reminder = self.to_do.task_to_reminder(results, list_id)
-                new_id = self._do_generate_id()
-                self.reminders[reminder_id]['uid'] = new_uid
-                self.reminders[new_id] = reminder
-                self._set_countdown(new_id)
-                self._reminder_updated(info.service_id, new_id, reminder)
-                self._save_reminders()
-        except:
-            pass
 
     def _caldav_set_completed(self, reminder_id, reminder):
         list_id = reminder['list-id']
@@ -1002,7 +910,7 @@ class Reminders():
                         try:
                             list_id = row['id']
                             user_id = row['user-id']
-                            if user_id not in 'local' and user_id not in self.to_do.users.keys() and user_id not in self.caldav.users.keys():
+                            if user_id not in 'local' and user_id not in self.caldav.users.keys():
                                 continue
                             lists[list_id] = {
                                 'name': row['name'],
@@ -1081,13 +989,7 @@ class Reminders():
 
         new_task_id = None
 
-        if location == 'ms-to-do':
-            task = self.to_do.reminder_to_task(reminder, completed=completed, completed_date=completed_date)
-            if updating:
-                self.to_do.update_task(user_id, list_uid, task_id, task)
-            else:
-                new_task_id = self.to_do.create_task(user_id, list_uid, task)
-        elif location == 'caldav':
+        if location == 'caldav':
             task = self.caldav.reminder_to_task(reminder, completed=completed, completed_timestamp=completed_timestamp)
             if updating:
                 self.caldav.update_task(user_id, list_uid, task_id, task)
@@ -1097,9 +999,7 @@ class Reminders():
         if moving:
             if old_user_id is None:
                 old_user_id = user_id
-            if old_user_id in self.to_do.users.keys():
-                self.to_do.remove_task(old_user_id, old_list_id, old_task_id)
-            elif old_user_id in self.caldav.users.keys():
+            if old_user_id in self.caldav.users.keys():
                 self.caldav.remove_task(old_user_id, old_list_id, old_task_id)
 
         return new_task_id
@@ -1237,8 +1137,6 @@ class Reminders():
         user_id = self.lists[reminder_dict['list-id']]['user-id']
         if user_id == 'local':
             location = 'local'
-        elif user_id in self.to_do.users.keys():
-            location = 'ms-to-do'
         elif user_id in self.caldav.users.keys():
             location = 'caldav'
         else:
@@ -1246,15 +1144,14 @@ class Reminders():
 
         if 'repeat-type' in kwargs.keys():
             repeat_type = int(kwargs['repeat-type'])
-            if location != 'ms-to-do' or repeat_type not in (1, 2):
-                reminder_dict['repeat-type'] = repeat_type
+            reminder_dict['repeat-type'] = repeat_type
 
         for i in ('repeat-frequency', 'repeat-days'):
             if reminder_dict['repeat-type'] != 0 and i in kwargs.keys():
                 reminder_dict[i] = int(kwargs[i])
 
         for i in ('repeat-times', 'repeat-until'):
-            if reminder_dict['repeat-type'] != 0 and location != 'ms-to-do' and i in kwargs.keys():
+            if reminder_dict['repeat-type'] != 0 and i in kwargs.keys():
                 reminder_dict[i] = int(kwargs[i])
 
         if 'important' in kwargs.keys():
@@ -1295,8 +1192,6 @@ class Reminders():
         user_id = self.lists[reminder_dict['list-id']]['user-id']
         if user_id == 'local':
             location = 'local'
-        elif user_id in self.to_do.users.keys():
-            location = 'ms-to-do'
         elif user_id in self.caldav.users.keys():
             location = 'caldav'
         else:
@@ -1304,7 +1199,7 @@ class Reminders():
 
         if 'repeat-type' in kwargs.keys():
             repeat_type = int(kwargs['repeat-type'])
-            reminder_dict['repeat-type'] = 0 if location == 'ms-to-do' and repeat_type in (1, 2) else repeat_type
+            reminder_dict['repeat-type'] = repeat_type
 
         for i in ('repeat-frequency', 'repeat-days'):
             if reminder_dict['repeat-type'] != 0 and i in kwargs.keys():
@@ -1313,7 +1208,7 @@ class Reminders():
                 reminder_dict.set_default(i)
 
         for i in ('repeat-times', 'repeat-until'):
-            if reminder_dict['repeat-type'] != 0 and location != 'ms-to-do' and i in kwargs.keys():
+            if reminder_dict['repeat-type'] != 0 and i in kwargs.keys():
                 reminder_dict[i] = int(kwargs[i])
             else:
                 reminder_dict.set_default(i)
@@ -1513,7 +1408,7 @@ class Reminders():
         list_name = str(kwargs['name'])
         user_id = str(kwargs['user-id'])
 
-        if user_id in self.to_do.users.keys() or user_id in self.caldav.users.keys() or user_id == 'local':
+        if user_id in self.caldav.users.keys() or user_id == 'local':
             list_id = self._do_generate_id()
 
             if user_id != 'local':
@@ -1568,10 +1463,6 @@ class Reminders():
         else:
             raise KeyError('Invalid List ID')
 
-    def get_todo_login_url(self):
-        url = self.to_do.get_login_url()
-        return GLib.Variant('(s)', (url,))
-
     def login_caldav(self, name: str, url: str, username: str, password: str):
         user_id = self.caldav.login(name, url, username, password)
         self.synced_ids.append(user_id)
@@ -1585,9 +1476,7 @@ class Reminders():
         self.do_emit('UsernameUpdated', GLib.Variant('(ss)', (user_id, username)))
 
     def logout(self, user_id: str):
-        if user_id in self.to_do.users.keys():
-            self.to_do.logout(user_id)
-        elif user_id in self.caldav.users.keys():
+        if user_id in self.caldav.users.keys():
             self.caldav.logout(user_id)
         else:
             raise KeyError('Invalid user id')
@@ -1680,9 +1569,6 @@ class Reminders():
                 'local': _('Local')
             }
         }
-        usernames['ms-to-do'] = {}
-        for user_id in self.to_do.users.keys():
-            usernames['ms-to-do'][user_id] = self.to_do.users[user_id]['email']
 
         usernames['caldav'] = {}
         for user_id in self.caldav.users.keys():

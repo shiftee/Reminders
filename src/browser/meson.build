@@ -14,7 +14,6 @@ source_files = files(
   'export_lists_window.py',
   'import_lists_window.py',
   'main_window.py',
-  'microsoft_sign_in.py',
   'move_reminders_window.py',
   'preferences.py',
   'reminder.py',

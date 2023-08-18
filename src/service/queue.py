@@ -230,8 +230,6 @@ class ReminderQueue():
         user_id = self.reminders.lists[self.reminders.reminders[reminder_id]['list-id']]['user-id']
         if user_id == 'local':
             location = 'local'
-        elif user_id in self.reminders.to_do.users.keys():
-            location = 'ms-to-do'
         elif user_id in self.reminders.caldav.users.keys():
             location = 'caldav'
         else:
@@ -246,8 +244,6 @@ class ReminderQueue():
 
         if user_id == 'local':
             location = 'local'
-        elif user_id in self.reminders.to_do.users.keys():
-            location = 'ms-to-do'
         elif user_id in self.reminders.caldav.users.keys():
             location = 'caldav'
         else:
